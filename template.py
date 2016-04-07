@@ -34,7 +34,7 @@ class CodeBuilder:
         return context
 
 
-class template:
+class Template:
     def __init__(self, text, *contents):
         self.context = []
         self._text = text
@@ -42,16 +42,22 @@ class template:
 
         self.var_all = []
 
-        vars_code = self.create_function()
+        self.vars_code = self.create_function()
         tokens = re.split(r"(?s)({{.*?}}|{%.*?%}|{#.*?#})", text)
         for token in tokens:
             if token.startswith("{#"):
                 continue
 
             elif token.startswith("{{"):
-                expr = self._expr_code(token[2,-2])
+                expr = self._expr_code(token[2:-2].strip())
+                self.code.add_line("append_result(to_str(%s))" % expr)
+            elif token.startswith("}}"):
+                continue
+            else:
+                self.code.add_line("append_result(to_str(%s))" % token)
 
-
+    def test_code(self):
+        return str(self.code)
 
     def _expr_code(self, expr):
         if "|" in expr:
@@ -66,21 +72,14 @@ class template:
             args = ", ".join(repr(d) for d in dots[1:])
             code = "do_dots(%s, %s)" % (code, args)
         else:
-            self._variable(expr, self.all_vars)
+            self._variable(expr, self.vars_code)
             code = "c_%s" % expr
         return code
 
     def _variable(self, name, vars_set):
-        """Track that `name` is used as a variable.
-
-        Adds the name to `vars_set`, a set of variable names.
-
-        Raises an syntax error if `name` is not a valid name.
-
-        """
         if not re.match(r"[_a-zA-Z][_a-zA-Z0-9]*$", name):
             self._syntax_error("Not a valid name", name)
-        vars_set.add(name)
+        vars_set.add_line("%s = context['%s']" % (name, name))
 
     def create_function(self):
         self.code.add_line("def render_function(context, do_dots):")
